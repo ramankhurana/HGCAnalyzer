@@ -57,7 +57,7 @@ process.HEback.CaloHitSource = cms.string("HGCHitsHEback")
 process.HEback.DetectorName = cms.string("HGCalHEScintillatorSensitive")
 process.HEback.OutFile = cms.string("OUTPUTFILEEEHEb.root")
 
-process.p = cms.Path(process.EE
-                     #process.HEfront+
-                     #process.HEback
+process.p = cms.Path(process.EE*
+                     process.HEfront*
+                     process.HEback
                      )

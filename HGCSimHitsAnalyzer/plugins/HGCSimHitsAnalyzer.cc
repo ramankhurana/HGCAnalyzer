@@ -49,6 +49,10 @@ HGCSimHitsAnalyzer::HGCSimHitsAnalyzer(const edm::ParameterSet& iConfig){
   
   sampFracEE = 1.54338469862809234e+02 ;
   f = new TFile(outputfilename_.c_str(),"RECREATE");
+
+  const char *name =  nameDetector_.c_str();
+  tree = new TTree("hgcSimHitTree",name);
+
   //SimHitVector.reserve(2000);
 }
 
@@ -165,13 +169,12 @@ void HGCSimHitsAnalyzer::analyzeHits (std::vector<PCaloHit>& hits) {
     hinfo.phi        = atan2(globaly,globalx);
     double theta     = acos(globalz/sqrt(globalx*globalx+globaly*globaly+globalz*globalz));
     hinfo.eta        = -log(tan(theta/2)); 
-    
+    hinfo.subdetname = nameDetector_;
     if (verbosity_>1) std::cout << " --------------------------   gx = " 
 				<< globalx << " gy = "  << globaly   << " gz = "
 				<< globalz << " phi = " << hinfo.phi << " eta = "
 				<< hinfo.eta << std::endl;
     std::pair<hitsinfo,energysum> pair_tmp(hinfo,esum);
-    //SimHitVector.push_back(pair_tmp);
     SimHitVector.push_back(hinfo);
 
     std::cout<<" before fill histo "<<std::endl;
@@ -248,8 +251,7 @@ bool HGCSimHitsAnalyzer::defineGeometry(edm::ESTransientHandle<DDCompactView> &d
 void HGCSimHitsAnalyzer::beginJob() {
   geometrydefined_ = false;
   symmDet_         = true;
-  tree = new TTree("hgcSimHitTree","Tree");
-  tree->Branch("SimHitVector","std::vector<hitsinfo>",&SimHitVector);
+  tree->Branch(("SimHitVector"),"std::vector<hitsinfo>",&SimHitVector);
 }
 
 // ------------ method called once each job just after ending the event loop  ------------

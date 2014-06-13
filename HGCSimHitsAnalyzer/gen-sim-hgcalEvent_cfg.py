@@ -59,7 +59,7 @@ process.source = cms.Source("EmptySource",
 
 process.generator = cms.EDProducer("FlatRandomEGunProducer",
     PGunParameters = cms.PSet(
-        PartID = cms.vint32(11),
+        PartID = cms.vint32(211),
         #MinEta = cms.double(1.75),
         MinEta = cms.double(2.0),
         MaxEta = cms.double(2.0),
