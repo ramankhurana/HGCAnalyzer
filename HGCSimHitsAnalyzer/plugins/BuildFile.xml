@@ -1,0 +1,5 @@
+<use name="HGCAnalyzer/HGCSimHitsAnalyzer"/>
+
+<library file="*.cc" name="HGCSimHitsAnalyzerPlugins">
+  <flags EDM_PLUGIN="1"/>
+</library>

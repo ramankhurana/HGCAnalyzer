@@ -1,0 +1,11 @@
+<lcgdict>
+  <class name="energysum" ClassVersion="1">
+    <version ClassVersion="1" checksum="4108244861" />
+  </class>
+
+  <class name="hitsinfo" ClassVersion="1">
+    <version ClassVersion="1" checksum="4128952474" />
+  </class>
+
+  <class name="std::vector<hitsinfo>" persistent="true"/>
+</lcgdict>
