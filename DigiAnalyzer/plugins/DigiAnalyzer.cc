@@ -54,24 +54,35 @@ Digi information include :
 #include "Geometry/Records/interface/IdealGeometryRecord.h"
 #include "CLHEP/Units/GlobalSystemOfUnits.h"
 #include <cmath>
+#include "DataFormats/HepMCCandidate/interface/GenParticle.h"
+
 
 #include "CommonTools/UtilAlgos/interface/TFileService.h"
 
-#define SAMPLES 3
+#define SAMPLES 6
+#define nlayer 30
 
 class DigiAnalyzer : public edm::EDAnalyzer {
 public:
   
   edm::Service<TFileService> fs;
   TTree* digiTree;
-  TH1F* ADC_[3];
-  std::vector<int> ADC_All;
-  std::vector<int> ADC_TS1;
-  std::vector<int> ADC_TS2;
-  std::vector<int> ADC_TS3;
-  std::vector<int> Gain;
+  
+  TH1F* ADC_Signal_[SAMPLES][nlayer];
+  TH1F* ADC_All_Signal_[nlayer];
+  TH1F* ADC_Signal[nlayer];
+  TH1F* ADC_Signal_AllLayer[SAMPLES];
+  TH2F* ADC_vs_TS_Signal_[nlayer];
+  
+  TH1F* ADC_Ctrl_[SAMPLES][nlayer];
+  TH1F* ADC_All_Ctrl_[nlayer];
+  TH1F* ADC_Ctrl[nlayer];
+  TH1F* ADC_Ctrl_AllLayer[SAMPLES];
+  TH2F* ADC_vs_TS_Ctrl_[nlayer];
+
   std::string  nameDetector_, DigiSource_;
   HGCalDDDConstants     *hgcons_;
+  bool debug;
   explicit DigiAnalyzer(const edm::ParameterSet&);
   ~DigiAnalyzer();
   
@@ -85,6 +96,7 @@ private:
   virtual void analyze(const edm::Event&, const edm::EventSetup&) override;
   virtual void endJob() override;
   
+  bool isSignal, isCtrl;
   //virtual void beginRun(edm::Run const&, edm::EventSetup const&) override;
   //virtual void endRun(edm::Run const&, edm::EventSetup const&) override;
   //virtual void beginLuminosityBlock(edm::LuminosityBlock const&, edm::EventSetup const&) override;
@@ -112,11 +124,34 @@ DigiAnalyzer::DigiAnalyzer(const edm::ParameterSet& iConfig)
   digiTree = fs->make<TTree>("digiTree","digiTree");
   
   for(int i=0; i<SAMPLES; i++){
-    TString postname = Form("_%d",i);
-    ADC_[i] = fs->make<TH1F> ("ADC"+postname, "ADC", 100,0,100);
+    TString postname = Form("_TS_%d_",i);
+    TString title    = Form(" %d;ADC;# of events (a.u.) ",i+1);
+    ADC_Signal_AllLayer[i] = fs->make<TH1F> ("ADC_Signal_AllLayer"+postname,"ADC : TS"+title,50,0,50);
+    ADC_Ctrl_AllLayer[i] = fs->make<TH1F> ("ADC_Ctrl_AllLayer"+postname,"ADC : TS"+title,50,0,50);
+  }
+  for(int ilayer=0; ilayer<nlayer; ilayer++){
+    for(int i=0; i<SAMPLES; i++){
+      TString postname = Form("_TS_%d_Layer_%d",i,ilayer);
+      TString title    = Form(" %d TS %d;ADC;# of events (a.u.) ",ilayer+1,i+1);
+      ADC_Signal_[i][ilayer] = fs->make<TH1F> ("ADC_Signal_"+postname, "ADC : Layer"+title, 50,0,50);
+      ADC_Ctrl_[i][ilayer]   = fs->make<TH1F> ("ADC_Ctrl_"+postname, "ADC : Layer"+title,50,0,50);
+    }
+    TString postname1 = Form("_Layer_%d",ilayer);
+    TString title1    = Form(" %d;ADC;# of events (a.u.) ",ilayer+1);
+    ADC_Signal[ilayer]   = fs->make<TH1F> ("ADC_Signal_"+postname1,"ADC : Layer"+title1,50,0,50);
+    ADC_Ctrl[ilayer]     = fs->make<TH1F> ("ADC_Ctrl_"+postname1,"ADC : Layer"+title1, 50,0,50);
+    
+    title1 = Form(" %d;ADC; TS",ilayer+1);
+    ADC_vs_TS_Signal_[ilayer] = fs->make<TH2F> ("ADC_vs_TS_Signal_"+postname1,"ADC : Layer"+title1,100,-0.5,99.5, 6, 0., 6.);
+    ADC_vs_TS_Ctrl_[ilayer]   = fs->make<TH2F> ("ADC_vs_TS_Ctrl_"+postname1,"ADC : Layer"+title1,100,-0.5,99.5, 6, 0., 6.);
+
+    title1 = Form(" %d;TS; ADC ",ilayer+1);
+    ADC_All_Signal_[ilayer]   = fs->make<TH1F> ("ADC_All_Signal_"+postname1,"ADC : Layer"+title1, 6,0,6);
+    ADC_All_Ctrl_[ilayer]     = fs->make<TH1F> ("ADC_All_Ctrl_"+postname1,"ADC : Layer"+title1, 6,0,6);
   }
   //now do what ever initialization is needed
-
+  
+  debug = false;
 }
 
 
@@ -138,11 +173,12 @@ void
 DigiAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup) {
   using namespace edm;
   
-  ADC_All.clear();
-  ADC_TS1.clear();
-  ADC_TS2.clear();
-  ADC_TS3.clear();
-  Gain.clear();
+  isSignal = false;
+  isCtrl   = false;
+                                                                                                                     
+  edm::Handle<edm::View<reco::Candidate> > genParticles;
+  iEvent.getByLabel(edm::InputTag("genParticles"), genParticles);
+  const reco::GenParticle & p = dynamic_cast<const reco::GenParticle &>( (*genParticles)[0] );
   
   edm::ESHandle<HGCalGeometry> geom;
   ForwardSubdetector subdet;
@@ -160,8 +196,20 @@ DigiAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup) {
     
     for(HGCEEDigiCollection::const_iterator it =theHGCEEDigiContainers->begin();
 	it !=theHGCEEDigiContainers->end(); ++it) {
+      // skip hit if it is empty 
+      if(it->size()==0) continue;
       HGCEEDetId detId = it->id();
+      const GlobalPoint pos( std::move( geom0.getPosition( detId.rawId()) ) );
+      
+      float dR=deltaR(pos.eta(),pos.phi(),p.eta(),p.phi());
+      isSignal = (dR<0.25);
+      
+      float idR=deltaR(pos.eta(),pos.phi(),-p.eta(),p.phi());
+      isCtrl = (idR<0.25);
+      
+      if(!isSignal && !isCtrl) continue;
       HGCDigiSaver(detId, subdet, geom0, it);
+      
     }
   }
 
@@ -182,6 +230,10 @@ DigiAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup) {
 	std::cout << "Cannot get valid HGCalGeometry Object for " << "HGCalEESensitive" << std::endl;
       
       const HGCalGeometry& geom0 = *geom;
+      std::cout<<" sending infor of digi "<<std::endl;
+      
+      
+      
       HGCDigiSaver(detId, subdet, geom0, it);
     }
   }
@@ -197,19 +249,32 @@ template<class T1, class T2>
 void DigiAnalyzer::HGCDigiSaver(T1 detId, ForwardSubdetector subdet, const HGCalGeometry& geom0, const T2 it) {
   double digiCharge = 0;
   int nSample = it->size();
+  
+  int layer=detId.layer();
+  int ilayer = layer -1;
   for (int i=0; i<nSample; ++i) {
     HGCSample hgcSample = it->sample(i);
     uint16_t gain = hgcSample.gain();
     uint16_t adc = hgcSample.adc();
     double charge = adc*gain;
-    ADC_[i]->Fill((int)adc);
-    ADC_All.push_back((int)adc);
-    if(i==0) ADC_TS1.push_back((int)adc);
-    if(i==1) ADC_TS2.push_back((int)adc);
-    if(i==2) ADC_TS3.push_back((int)adc);
-    Gain.push_back((int)gain);
+    
+    if(isSignal) {
+      ADC_Signal_AllLayer[i]->Fill((int)adc);
+      ADC_Signal_[i][ilayer]->Fill((int)adc);
+      ADC_All_Signal_[ilayer]->Fill(i,(int)adc);
+      ADC_vs_TS_Signal_[ilayer]->Fill((int)adc,i);
+      ADC_Signal[ilayer]->Fill((int)adc);
+    }
+    if(isCtrl){
+      ADC_Ctrl_AllLayer[i]->Fill((int)adc);
+      ADC_Ctrl_[i][ilayer]->Fill((int)adc);
+      ADC_All_Ctrl_[ilayer]->Fill(i,(int)adc);
+      ADC_vs_TS_Ctrl_[ilayer]->Fill((int)adc,i);
+      ADC_Ctrl[ilayer]->Fill((int)adc);
+    }
     digiCharge += charge;
   }
+
   
 }
 
@@ -219,11 +284,12 @@ void DigiAnalyzer::HGCDigiSaver(T1 detId, ForwardSubdetector subdet, const HGCal
 void 
 DigiAnalyzer::beginJob()
 {
-  digiTree->Branch("ADC_All", "std::vector<int>", &ADC_All);
-  digiTree->Branch("ADC_TS1", "std::vector<int>", &ADC_TS1);
-  digiTree->Branch("ADC_TS2", "std::vector<int>", &ADC_TS2);
-  digiTree->Branch("ADC_TS3", "std::vector<int>", &ADC_TS3);
-  digiTree->Branch("Gain","std::vector<int>",&Gain);
+  //digiTree->Branch("ADC_All", "std::vector<int>", &ADC_All);
+  //digiTree->Branch("Sample", "std::vector<int>", &Sample);
+  //digiTree->Branch("ADC_TS1", "std::vector<int>", &ADC_TS1);
+  //digiTree->Branch("ADC_TS2", "std::vector<int>", &ADC_TS2);
+  //digiTree->Branch("ADC_TS3", "std::vector<int>", &ADC_TS3);
+  //digiTree->Branch("Gain","std::vector<int>",&Gain);
   
 }
 
