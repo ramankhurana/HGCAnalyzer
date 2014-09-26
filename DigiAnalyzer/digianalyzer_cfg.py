@@ -44,7 +44,8 @@ process.source = cms.Source("PoolSource",
         #'file:/afs/cern.ch/work/k/khurana/HGCAL/Digi/CMSSW_6_2_0_SLHC16/src/EventGeneration/HGC/gen-sim-digi_Pt-10_Eta-1.75_ID-13.root'
         #'file:/tmp/khurana/gen-sim-digi-Pt-10.0_Eta-2.0__TauValue-20.0.root'
         #'file:/tmp/khurana/gen-sim-digi-Pt-10.0_Eta-2.0_140PU__TauValue-5.0.root'
-        'root://eoscms.cern.ch//store/user/khurana/HGCAL/Digi/SingleParticle/INPUTFILENAME'
+        #'root://eoscms.cern.ch//store/user/khurana/HGCAL/Digi/SingleParticle/gen-sim-digi-Pt-10.0_Eta-2.0__TauValue-20.0.root'
+        'root://eoscms.cern.ch//store/user/khurana/HGCAL/Digi/SingleParticle/gen-sim-digi-Pt-10.0_Eta-2.0_140PU__TauValue-20.0.root'
         )
                             )
 

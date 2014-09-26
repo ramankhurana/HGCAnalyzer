@@ -24,97 +24,9 @@ Digi information include :
 
 
 // system include files
-#include <memory>
-#include "TTree.h"
-#include "TFile.h"
-#include "TBranch.h"
-// user include files
-#include "FWCore/Framework/interface/Frameworkfwd.h"
-#include "FWCore/Framework/interface/EDAnalyzer.h"
 
-#include "FWCore/Framework/interface/Event.h"
-#include "FWCore/Framework/interface/MakerMacros.h"
+#include "DigiAnalyzer.h"
 
-#include "FWCore/ParameterSet/interface/ParameterSet.h"
-#include "Validation/HGCalValidation/plugins/HGCalDigiValidation.h"
-#include "DataFormats/ForwardDetId/interface/ForwardSubdetector.h"
-#include "FWCore/Framework/interface/ESTransientHandle.h"
-#include "FWCore/Framework/interface/ESHandle.h"
-#include "FWCore/Framework/interface/MakerMacros.h"
-/////                                                                                                                                                                  
-#include "DetectorDescription/Core/interface/DDExpandedView.h"
-#include "DetectorDescription/Core/interface/DDSpecifics.h"
-#include "DetectorDescription/Core/interface/DDSolid.h"
-#include "DetectorDescription/Core/interface/DDFilter.h"
-#include "DetectorDescription/Core/interface/DDFilteredView.h"
-#include "DetectorDescription/Core/interface/DDSolid.h"
-#include "FWCore/Utilities/interface/InputTag.h" 
-#include "DataFormats/HGCDigi/interface/HGCDigiCollections.h"
-
-#include "Geometry/Records/interface/IdealGeometryRecord.h"
-#include "CLHEP/Units/GlobalSystemOfUnits.h"
-#include <cmath>
-#include "DataFormats/HepMCCandidate/interface/GenParticle.h"
-
-
-#include "CommonTools/UtilAlgos/interface/TFileService.h"
-
-#define SAMPLES 6
-#define nlayer 30
-
-class DigiAnalyzer : public edm::EDAnalyzer {
-public:
-  
-  edm::Service<TFileService> fs;
-  TTree* digiTree;
-  
-  TH1F* ADC_Signal_[SAMPLES][nlayer];
-  TH1F* ADC_All_Signal_[nlayer];
-  TH1F* ADC_Signal[nlayer];
-  TH1F* ADC_Signal_AllLayer[SAMPLES];
-  TH2F* ADC_vs_TS_Signal_[nlayer];
-  
-  TH1F* ADC_Ctrl_[SAMPLES][nlayer];
-  TH1F* ADC_All_Ctrl_[nlayer];
-  TH1F* ADC_Ctrl[nlayer];
-  TH1F* ADC_Ctrl_AllLayer[SAMPLES];
-  TH2F* ADC_vs_TS_Ctrl_[nlayer];
-
-  std::string  nameDetector_, DigiSource_;
-  HGCalDDDConstants     *hgcons_;
-  bool debug;
-  explicit DigiAnalyzer(const edm::ParameterSet&);
-  ~DigiAnalyzer();
-  
-  static void fillDescriptions(edm::ConfigurationDescriptions& descriptions);
-  
-  template<class T1, class T2> 
-  void HGCDigiSaver(T1 detId, ForwardSubdetector subdet, const HGCalGeometry& geom0, const T2 it);
-  
-private:
-  virtual void beginJob() override;
-  virtual void analyze(const edm::Event&, const edm::EventSetup&) override;
-  virtual void endJob() override;
-  
-  bool isSignal, isCtrl;
-  //virtual void beginRun(edm::Run const&, edm::EventSetup const&) override;
-  //virtual void endRun(edm::Run const&, edm::EventSetup const&) override;
-  //virtual void beginLuminosityBlock(edm::LuminosityBlock const&, edm::EventSetup const&) override;
-  //virtual void endLuminosityBlock(edm::LuminosityBlock const&, edm::EventSetup const&) override;
-  // ----------member data ---------------------------
-};
-
-//
-// constants, enums and typedefs
-//
-
-//
-// static data member definitions
-//
-
-//
-// constructors and destructor
-//
 DigiAnalyzer::DigiAnalyzer(const edm::ParameterSet& iConfig)
 {
   nameDetector_  = iConfig.getParameter<std::string>("DetectorName");
@@ -122,33 +34,14 @@ DigiAnalyzer::DigiAnalyzer(const edm::ParameterSet& iConfig)
   
   fs->make<TTree>("tree","tree");
   digiTree = fs->make<TTree>("digiTree","digiTree");
+  DeclareHistograms();
   
-  for(int i=0; i<SAMPLES; i++){
-    TString postname = Form("_TS_%d_",i);
-    TString title    = Form(" %d;ADC;# of events (a.u.) ",i+1);
-    ADC_Signal_AllLayer[i] = fs->make<TH1F> ("ADC_Signal_AllLayer"+postname,"ADC : TS"+title,50,0,50);
-    ADC_Ctrl_AllLayer[i] = fs->make<TH1F> ("ADC_Ctrl_AllLayer"+postname,"ADC : TS"+title,50,0,50);
+  if (nameDetector_ == "HGCalEESensitive") {
+    subdet = HGCEE;
   }
-  for(int ilayer=0; ilayer<nlayer; ilayer++){
-    for(int i=0; i<SAMPLES; i++){
-      TString postname = Form("_TS_%d_Layer_%d",i,ilayer);
-      TString title    = Form(" %d TS %d;ADC;# of events (a.u.) ",ilayer+1,i+1);
-      ADC_Signal_[i][ilayer] = fs->make<TH1F> ("ADC_Signal_"+postname, "ADC : Layer"+title, 50,0,50);
-      ADC_Ctrl_[i][ilayer]   = fs->make<TH1F> ("ADC_Ctrl_"+postname, "ADC : Layer"+title,50,0,50);
-    }
-    TString postname1 = Form("_Layer_%d",ilayer);
-    TString title1    = Form(" %d;ADC;# of events (a.u.) ",ilayer+1);
-    ADC_Signal[ilayer]   = fs->make<TH1F> ("ADC_Signal_"+postname1,"ADC : Layer"+title1,50,0,50);
-    ADC_Ctrl[ilayer]     = fs->make<TH1F> ("ADC_Ctrl_"+postname1,"ADC : Layer"+title1, 50,0,50);
-    
-    title1 = Form(" %d;ADC; TS",ilayer+1);
-    ADC_vs_TS_Signal_[ilayer] = fs->make<TH2F> ("ADC_vs_TS_Signal_"+postname1,"ADC : Layer"+title1,100,-0.5,99.5, 6, 0., 6.);
-    ADC_vs_TS_Ctrl_[ilayer]   = fs->make<TH2F> ("ADC_vs_TS_Ctrl_"+postname1,"ADC : Layer"+title1,100,-0.5,99.5, 6, 0., 6.);
+  else if (nameDetector_ == "HGCalHESiliconSensitive") subdet = HGCHEF;
+  else subdet = HGCHEB;
 
-    title1 = Form(" %d;TS; ADC ",ilayer+1);
-    ADC_All_Signal_[ilayer]   = fs->make<TH1F> ("ADC_All_Signal_"+postname1,"ADC : Layer"+title1, 6,0,6);
-    ADC_All_Ctrl_[ilayer]     = fs->make<TH1F> ("ADC_All_Ctrl_"+postname1,"ADC : Layer"+title1, 6,0,6);
-  }
   //now do what ever initialization is needed
   
   debug = false;
@@ -157,10 +50,10 @@ DigiAnalyzer::DigiAnalyzer(const edm::ParameterSet& iConfig)
 
 DigiAnalyzer::~DigiAnalyzer()
 {
- 
-   // do anything here that needs to be done at desctruction time
-   // (e.g. close files, deallocate resources etc.)
-
+  
+  // do anything here that needs to be done at desctruction time
+  // (e.g. close files, deallocate resources etc.)
+  
 }
 
 
@@ -175,16 +68,13 @@ DigiAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup) {
   
   isSignal = false;
   isCtrl   = false;
-                                                                                                                     
+  for(int ilayer=0; ilayer<(int)AllADCInDet.size();ilayer++) AllADCInDet[ilayer].clear();
   edm::Handle<edm::View<reco::Candidate> > genParticles;
   iEvent.getByLabel(edm::InputTag("genParticles"), genParticles);
   const reco::GenParticle & p = dynamic_cast<const reco::GenParticle &>( (*genParticles)[0] );
   
   edm::ESHandle<HGCalGeometry> geom;
-  ForwardSubdetector subdet;
-  
   if (nameDetector_ == "HGCalEESensitive") {
-    subdet = HGCEE;
     iSetup.get<IdealGeometryRecord>().get("HGCalEESensitive",geom);
     
     if (!geom.isValid())
@@ -196,22 +86,73 @@ DigiAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup) {
     
     for(HGCEEDigiCollection::const_iterator it =theHGCEEDigiContainers->begin();
 	it !=theHGCEEDigiContainers->end(); ++it) {
-      // skip hit if it is empty 
+      // skip hit if iterator  is empty 
       if(it->size()==0) continue;
       HGCEEDetId detId = it->id();
+      
+      if(it->sample(5).adc() ==0 ) continue;
+      
       const GlobalPoint pos( std::move( geom0.getPosition( detId.rawId()) ) );
       
       float dR=deltaR(pos.eta(),pos.phi(),p.eta(),p.phi());
-      isSignal = (dR<0.25);
+      isSignal = (dR<0.025);
       
       float idR=deltaR(pos.eta(),pos.phi(),-p.eta(),p.phi());
-      isCtrl = (idR<0.25);
+      isCtrl = (idR<0.025);
+      
+      //std::cout<<" dR = "<<dR<<std::endl;
+      if(isSignal){
+	int ilayer = detId.layer() - 1;
+	std::pair<HGCEEDetId, int> tmpPair ( detId, it->sample(5).adc() );
+	AllADCInDet[ilayer].insert(std::pair<HGCEEDetId, int>(tmpPair));
+	std::cout<<" detId = "<<detId		 <<" adc = "<<it->sample(5).adc()		 <<std::endl;
+      }
+      
+      
+                  
       
       if(!isSignal && !isCtrl) continue;
       HGCDigiSaver(detId, subdet, geom0, it);
       
+    } // end of digi collection
+      
+    for (int ilayer=0; ilayer<31; ilayer++) {
+      maximumCell_ = 0;
+      std::cout<<" size of each map for layer = "<<ilayer<<"   "<<AllADCInDet[ilayer].size()<<std::endl;
+      ADCInLayer LayerADC = AllADCInDet[ilayer]; 
+      std::pair<HGCEEDetId, int> maximumDetId (isocomputation->Max_Element(LayerADC) ) ;
+      maximumCell_ = maximumDetId.second;
+      SeedCell_[ilayer]->Fill(maximumCell_);
+      std::cout<<" maximumCell_ in this layer "<<ilayer<<" is = "<<maximumCell_<<std::endl;
+      std::vector<int> adciso = isocomputation->IsolatationRectangle(hgctopology_,LayerADC,ncell,ncell,1);
+      for (int icell=0; icell<(int)adciso.size(); icell++) {
+	IsoRectangle_[icell][ilayer]->Fill(adciso[icell]);
+	SeedVsIsolation_square_[icell][ilayer]->Fill(maximumCell_,adciso[icell]);
+      }
+      
+      std::vector<std::pair<int,int>> triangle_iso(isocomputation->IsolatationTriangle(hgctopology_,LayerADC,ncell,ncell,1));
+      for (int icell=0; icell<(int)triangle_iso.size(); icell++) {
+	IsoTriangleUpper_[icell][ilayer]->Fill(triangle_iso[icell].first);
+	IsoTriangleLower_[icell][ilayer]->Fill(triangle_iso[icell].second);
+	SeedVsIsolation_upper_[icell][ilayer]->Fill(maximumCell_,triangle_iso[icell].first);
+	SeedVsIsolation_lower_[icell][ilayer]->Fill(maximumCell_,triangle_iso[icell].second);
+      }
+      for (int i=0; i<(int)triangle_iso.size(); i++) std::cout <<"adciso = "
+							       <<adciso[i]
+							       <<" tringle_iso = "
+							       <<"    "<<triangle_iso[i].first
+							       <<"    "<<triangle_iso[i].second
+							       <<"    "<<maximumCell_
+							       <<std::endl;
+      
     }
+    
   }
+  
+  
+  // -------------------------------------//
+  //  --------- End of HGC EE ------------//
+  // -------------------------------------//
 
   else if((nameDetector_ == "HGCalHESiliconSensitive") || (nameDetector_ == "HGCalHEScintillatorSensitive")){
     
@@ -252,6 +193,7 @@ void DigiAnalyzer::HGCDigiSaver(T1 detId, ForwardSubdetector subdet, const HGCal
   
   int layer=detId.layer();
   int ilayer = layer -1;
+  
   for (int i=0; i<nSample; ++i) {
     HGCSample hgcSample = it->sample(i);
     uint16_t gain = hgcSample.gain();
@@ -305,12 +247,18 @@ DigiAnalyzer::endJob()
 }
 
 // ------------ method called when starting to processes a run  ------------
-/*
+
 void 
-DigiAnalyzer::beginRun(edm::Run const&, edm::EventSetup const&)
+DigiAnalyzer::beginRun(edm::Run const& iRun, edm::EventSetup const& iSetup)
 {
+  edm::ESTransientHandle<DDCompactView> pDD;
+  iSetup.get<IdealGeometryRecord>().get( pDD );
+  const DDCompactView & cview = *pDD;
+  hgcons_ = new HGCalDDDConstants(cview, nameDetector_);
+  hgctopology_ = new HGCalTopology(*hgcons_,subdet,0);
+
 }
-*/
+
 
 // ------------ method called when ending the processing of a run  ------------
 /*
@@ -346,5 +294,69 @@ DigiAnalyzer::fillDescriptions(edm::ConfigurationDescriptions& descriptions) {
   descriptions.addDefault(desc);
 }
 
+
+void DigiAnalyzer::DeclareHistograms(){
+  
+  for(int i=0; i<ncell; i++){
+    for(int ilayer=0; ilayer<nlayer; ilayer++){
+    TString postname = Form("_ncell_%d_Layer_%d",i,ilayer);
+    TString title    = Form(" %d cell %d;ADC;# of events (a.u.) ",ilayer+1,i+1);
+    IsoRectangle_[i][ilayer] = fs->make<TH1F> ("Iso_Rectangle_"+postname, "Iso^{rectangle} : Layer"+title, 50,0,50);
+    IsoTriangleUpper_[i][ilayer] = fs->make<TH1F> ("IsoTriangleUpper_"+postname, "Iso^{triangle}_{upper} : Layer"+title, 50,0,50);
+    IsoTriangleLower_[i][ilayer] = fs->make<TH1F> ("IsoTriangleLower_"+postname, "Iso^{triangle}_{lower} : Layer"+title, 50,0,50);
+    SeedVsIsolation_upper_[i][ilayer]  = fs->make<TH2F> ("SeedVsIsolation_upper_"+postname,"SeedVsIsolation_;Seed;Isolation",50,0,50, 50,0,50 );
+    SeedVsIsolation_lower_[i][ilayer]  = fs->make<TH2F> ("SeedVsIsolation_lower_"+postname,"SeedVsIsolation_;Seed;Isolation",50,0,50, 50,0,50 );
+    SeedVsIsolation_square_[i][ilayer] = fs->make<TH2F> ("SeedVsIsolation_square_"+postname,"SeedVsIsolation_;Seed;Isolation",50,0,50, 50,0,50 );
+    }
+  }
+
+  for(int i=0; i<SAMPLES; i++){
+    TString postname = Form("_TS_%d_",i);
+    TString title    = Form(" %d;ADC;# of events (a.u.) ",i+1);
+    ADC_Signal_AllLayer[i] = fs->make<TH1F> ("ADC_Signal_AllLayer"+postname,"ADC : TS"+title,50,0,50);
+    ADC_Ctrl_AllLayer[i] = fs->make<TH1F> ("ADC_Ctrl_AllLayer"+postname,"ADC : TS"+title,50,0,50);
+  }
+  for(int ilayer=0; ilayer<nlayer; ilayer++){
+    for(int i=0; i<SAMPLES; i++){
+      TString postname = Form("_TS_%d_Layer_%d",i,ilayer);
+      TString title    = Form(" %d TS %d;ADC;# of events (a.u.) ",ilayer+1,i+1);
+      ADC_Signal_[i][ilayer] = fs->make<TH1F> ("ADC_Signal_"+postname, "ADC : Layer"+title, 50,0,50);
+      ADC_Ctrl_[i][ilayer]   = fs->make<TH1F> ("ADC_Ctrl_"+postname, "ADC : Layer"+title,50,0,50);
+    }
+    TString postname1 = Form("_Layer_%d",ilayer);
+    TString title1    = Form(" %d;ADC;# of events (a.u.) ",ilayer+1);
+    SeedCell_[ilayer]    = fs->make<TH1F> ("SeedCell_"+postname1,"ADC counts in seed cell : Layer"+title1,50,0,50);
+    ADC_Signal[ilayer]   = fs->make<TH1F> ("ADC_Signal_"+postname1,"ADC : Layer"+title1,50,0,50);
+    ADC_Ctrl[ilayer]     = fs->make<TH1F> ("ADC_Ctrl_"+postname1,"ADC : Layer"+title1, 50,0,50);
+    
+    title1 = Form(" %d;ADC; TS",ilayer+1);
+    ADC_vs_TS_Signal_[ilayer] = fs->make<TH2F> ("ADC_vs_TS_Signal_"+postname1,"ADC : Layer"+title1,100,-0.5,99.5, 6, 0., 6.);
+    ADC_vs_TS_Ctrl_[ilayer]   = fs->make<TH2F> ("ADC_vs_TS_Ctrl_"+postname1,"ADC : Layer"+title1,100,-0.5,99.5, 6, 0., 6.);
+    
+    title1 = Form(" %d;TS; ADC ",ilayer+1);
+    ADC_All_Signal_[ilayer]   = fs->make<TH1F> ("ADC_All_Signal_"+postname1,"ADC : Layer"+title1, 6,0,6);
+    ADC_All_Ctrl_[ilayer]     = fs->make<TH1F> ("ADC_All_Ctrl_"+postname1,"ADC : Layer"+title1, 6,0,6);
+  }
+}
+
+/*
+std::pair<HGCEEDetId, int> DigiAnalyzer::Max_Element (std::map<HGCEEDetId, int> map_){
+  
+  std::cout<<" size of map = "<<map_.size()<<std::endl;
+  std::map<HGCEEDetId,int>::const_iterator iter = map_.begin();
+  int maximum_= iter->second;
+  HGCEEDetId   key_;
+  for(iter=map_.begin() ; iter != map_.end(); ++iter){
+    //std::cout<< " finding maximum = "<< key_<<"  "<<maximum_<<std::endl;
+    if(iter->second > maximum_){
+      maximum_ = iter->second;
+      key_     = iter->first;
+    }
+  }
+  return std::pair<HGCEEDetId, int>(key_,maximum_);
+}
+*/
 //define this as a plug-in
 DEFINE_FWK_MODULE(DigiAnalyzer);
+
+
