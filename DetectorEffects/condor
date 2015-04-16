@@ -1,0 +1,16 @@
+x509userproxy = /tmp/x509up_u4138
+universe = vanilla
+Executable = Job.sh
+Notification         = never
+WhenToTransferOutput = On_Exit
+ShouldTransferFiles  = yes
+on_exit_remove       = (ExitBySignal == FALSE && (ExitCode == 0 || ExitCode == 42 || NumJobStarts>3))
++IsFastQueueJob      = True
+getenv = true
+request_memory       = 1992
+request_disk         = 2048000
+Transfer_Input_Files = /home/khurana/WorkingDir/CMSSW_7_0_6_patch1/src/DetectorEffects/main.exe, 
+output               = trail.out
+error                = trail.err
+Log                  = trail.log
+Queue
